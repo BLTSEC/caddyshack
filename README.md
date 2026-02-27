@@ -1,6 +1,6 @@
 # caddyshack
 
-**Website Cloner & Credential Harvester — v2.1.1**
+**Website Cloner & Credential Harvester — v2.2.0**
 
 Written by: Brennan Turner ([@BLTSEC](https://BLTSEC.COM))
 
@@ -14,7 +14,8 @@ Written by: Brennan Turner ([@BLTSEC](https://BLTSEC.COM))
 ## Features
 
 - **Native Go HTTP cloning** — no wget dependency; fetches HTML + CSS/JS/images with a modern Chrome UA
-- **JS-driven form capture** — injects a hook script into `<head>` that intercepts `fetch()`, `XMLHttpRequest`, and form submit events before site JS runs; captured fields are silently beaconed to `/capture` so the victim sees no interruption
+- **Overlay mode** (`--overlay`) — strips all site JavaScript and injects a "Session Expired" login card over the blurred cloned page. No error popups, no failed API calls — just a clean credential capture form. Best option for JS-heavy targets
+- **JS-driven form capture** — in default mode, injects hooks that intercept `fetch()` and `XMLHttpRequest` before site JS runs; captured fields are silently beaconed to `/capture`
 - **CSS sub-asset rewriting** — parses downloaded CSS for `url()` and `@import` references, fetches fonts/background images, and rewrites paths locally; inline `<style>` blocks and `style=""` attributes are also processed
 - **CDN-friendly asset downloading** — sends `Referer` and `Accept` headers on every asset request; failed assets fall back to their original URLs instead of producing broken local paths
 - **Proper form rewriting** — `golang.org/x/net/html` parser replaces all form actions with `/submit`; GET forms stay GET, POST forms stay POST
@@ -94,6 +95,14 @@ nc -lk 9999
 
 Each form submission POSTs a JSON object to the webhook URL.
 
+### Overlay mode (recommended for JS-heavy sites)
+
+```bash
+./caddyshack --url https://target.lab/login --overlay
+```
+
+Strips all site JavaScript and injects a "Session Expired" login overlay on top of the blurred cloned page. No error popups, no failed API calls — the victim sees the real site behind a clean credential capture card.
+
 ### Verbose + clone a site with HTTPS that has a self-signed cert
 
 ```bash
@@ -115,6 +124,7 @@ Each form submission POSTs a JSON object to the webhook URL.
 | `--redirect` | target URL | URL to redirect victims after capture |
 | `--user-agent` | Chrome 133 | User-Agent used when cloning |
 | `--webhook` | | HTTP/HTTPS URL for credential POSTs |
+| `--overlay` | false | Strip site JS and inject a themed login overlay |
 | `--insecure` | false | Skip TLS verification when cloning |
 | `--verbose` | false | Debug output |
 
