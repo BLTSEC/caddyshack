@@ -135,7 +135,7 @@ jq '.fields' creds.json
 
 ## Known limitations
 
-- **SPAs** — pages that render login forms entirely via JavaScript won't clone correctly (no headless browser)
+- **SPAs** — pages that render login forms entirely via JavaScript won't clone correctly (no headless browser). The page clones successfully but React/Angular/Vue apps mount their forms at runtime via JS bundles, leaving no `<form>` tags in the static HTML to rewrite. Use [evilginx](https://github.com/kgretzky/evilginx2) or [Modlishka](https://github.com/drk1wi/Modlishka) for React/SPA targets
 - **Bot protection** — Cloudflare, Akamai, etc. may block the cloner HTTP client
 - **CSS `@import` / JS-loaded assets** — only one level of asset extraction; chained imports are not followed
 - **2FA/MFA relay** — not supported; this is not a reverse proxy. See [evilginx2](https://github.com/kgretzky/evilginx2) for that
