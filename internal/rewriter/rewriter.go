@@ -64,12 +64,17 @@ const networkSilencer = `(function(){
   XHR.open=function(){this._csBlock=true;};
   XHR.send=function(){
     if(this._csBlock){
-      Object.defineProperty(this,'readyState',{get:function(){return 4;}});
-      Object.defineProperty(this,'status',{get:function(){return 200;}});
-      Object.defineProperty(this,'responseText',{get:function(){return '{}';}});
-      Object.defineProperty(this,'response',{get:function(){return '{}';}});
-      try{this.onreadystatechange&&this.onreadystatechange();}catch(e){}
-      try{this.onload&&this.onload();}catch(e){}
+      var self=this;
+      Object.defineProperty(self,'readyState',{get:function(){return 4;}});
+      Object.defineProperty(self,'status',{get:function(){return 200;}});
+      Object.defineProperty(self,'responseText',{get:function(){return '{}';}});
+      Object.defineProperty(self,'response',{get:function(){return '{}';}});
+      setTimeout(function(){
+        try{self.onreadystatechange&&self.onreadystatechange();}catch(e){}
+        try{self.onload&&self.onload();}catch(e){}
+        try{self.dispatchEvent(new Event('load'));}catch(e){}
+        try{self.dispatchEvent(new Event('loadend'));}catch(e){}
+      },0);
     }
   };
   XHR.setRequestHeader=noop;
@@ -147,19 +152,6 @@ func injectCaptureScript(doc *html.Node) {
 	script := &html.Node{Type: html.ElementNode, Data: "script"}
 	script.AppendChild(&html.Node{Type: html.TextNode, Data: captureScript})
 	head.InsertBefore(script, head.FirstChild)
-}
-
-// stripScripts removes all <script> elements from the document tree.
-func stripScripts(n *html.Node) {
-	var next *html.Node
-	for c := n.FirstChild; c != nil; c = next {
-		next = c.NextSibling
-		if c.Type == html.ElementNode && c.Data == "script" {
-			n.RemoveChild(c)
-			continue
-		}
-		stripScripts(c)
-	}
 }
 
 // injectOverlay appends the overlay style and markup to <body>.

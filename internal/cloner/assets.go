@@ -212,10 +212,14 @@ func makeAsset(rawURL string, base *url.URL, tag, attr string) *Asset {
 	ext := path.Ext(abs.Path)
 	// Dynamic resource loaders (e.g. /load.php?only=styles) have misleading extensions.
 	// Fall back to tag-based defaults for common cases.
-	if ext == "" || ext == ".php" || ext == ".asp" || ext == ".aspx" || ext == ".jsp" {
+	isDynamic := ext == "" || ext == ".php" || ext == ".asp" || ext == ".aspx" || ext == ".jsp"
+	if isDynamic {
 		switch tag {
 		case "link":
-			ext = ".css"
+			// Only default to .css for stylesheet links; other link types (icon, preload) keep original ext.
+			if attr == "href" {
+				ext = ".css"
+			}
 		case "script":
 			ext = ".js"
 		case "img":

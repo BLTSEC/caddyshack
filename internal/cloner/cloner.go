@@ -207,10 +207,12 @@ func (c *Cloner) downloadToFile(ctx context.Context, absoluteURL, localName, ass
 			return err
 		}
 
-		_, err = io.Copy(f, io.LimitReader(resp.Body, maxAssetSize))
+		_, copyErr := io.Copy(f, io.LimitReader(resp.Body, maxAssetSize))
 		resp.Body.Close()
-		f.Close()
-		return err
+		if closeErr := f.Close(); closeErr != nil && copyErr == nil {
+			return closeErr
+		}
+		return copyErr
 	}
 
 	return fmt.Errorf("HTTP %d after %d retries", http.StatusTooManyRequests, maxRetries)
