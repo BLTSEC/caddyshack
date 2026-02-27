@@ -55,7 +55,7 @@ const captureScript = `(function(){
 
 const overlayCSS = `
 #cs-overlay{position:fixed;top:0;left:0;width:100%;height:100%;z-index:999999;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-#cs-backdrop{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);backdrop-filter:blur(3px)}
+#cs-backdrop{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.25);backdrop-filter:blur(1px)}
 #cs-card{position:relative;max-width:380px;margin:15vh auto;background:#fff;border-radius:8px;padding:36px;box-shadow:0 8px 32px rgba(0,0,0,.3)}
 #cs-card h2{margin:0 0 6px;font-size:22px;font-weight:600;color:#1a1a1a}
 #cs-card p{margin:0 0 24px;color:#666;font-size:14px}
