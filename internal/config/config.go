@@ -6,7 +6,7 @@ import (
 	"net/url"
 )
 
-const Version = "2.1.0"
+const Version = "2.1.1"
 
 // Config holds all runtime configuration for caddyshack.
 type Config struct {
