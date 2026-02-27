@@ -1,6 +1,6 @@
 # caddyshack
 
-**Website Cloner & Credential Harvester — v2.0.0**
+**Website Cloner & Credential Harvester — v2.1.1**
 
 Written by: Brennan Turner ([@BLTSEC](https://BLTSEC.COM))
 
@@ -14,7 +14,10 @@ Written by: Brennan Turner ([@BLTSEC](https://BLTSEC.COM))
 ## Features
 
 - **Native Go HTTP cloning** — no wget dependency; fetches HTML + CSS/JS/images with a modern Chrome UA
-- **Proper form rewriting** — `golang.org/x/net/html` tokenizer replaces all form actions with `/submit`; no broken regex
+- **JS-driven form capture** — injects a hook script into `<head>` that intercepts `fetch()`, `XMLHttpRequest`, and form submit events before site JS runs; captured fields are silently beaconed to `/capture` so the victim sees no interruption
+- **CSS sub-asset rewriting** — parses downloaded CSS for `url()` and `@import` references, fetches fonts/background images, and rewrites paths locally; inline `<style>` blocks and `style=""` attributes are also processed
+- **CDN-friendly asset downloading** — sends `Referer` and `Accept` headers on every asset request; failed assets fall back to their original URLs instead of producing broken local paths
+- **Proper form rewriting** — `golang.org/x/net/html` parser replaces all form actions with `/submit`; GET forms stay GET, POST forms stay POST
 - **HTTP or HTTPS** — auto-generates an in-memory ECDSA P-256 self-signed cert when `--tls` is set, or load your own
 - **JSON Lines logging** — each capture is one JSON object appended to a file; `jq`-friendly, survives crashes
 - **Colored console alerts** — real-time `[!] CREDENTIALS CAPTURED` output with field values
@@ -110,7 +113,7 @@ Each form submission POSTs a JSON object to the webhook URL.
 | `--key` | | TLS private key file (PEM) |
 | `--output` | `creds.json` | Credential log file (JSON Lines) |
 | `--redirect` | target URL | URL to redirect victims after capture |
-| `--user-agent` | Chrome 131 | User-Agent used when cloning |
+| `--user-agent` | Chrome 133 | User-Agent used when cloning |
 | `--webhook` | | HTTP/HTTPS URL for credential POSTs |
 | `--insecure` | false | Skip TLS verification when cloning |
 | `--verbose` | false | Debug output |
@@ -135,7 +138,7 @@ jq '.fields' creds.json
 
 ## Known limitations
 
-- **SPAs** — pages that render login forms entirely via JavaScript won't clone correctly (no headless browser). The page clones successfully but React/Angular/Vue apps mount their forms at runtime via JS bundles, leaving no `<form>` tags in the static HTML to rewrite. Use [evilginx](https://github.com/kgretzky/evilginx2) or [Modlishka](https://github.com/drk1wi/Modlishka) for React/SPA targets
-- **Bot protection** — Cloudflare, Akamai, etc. may block the cloner HTTP client
-- **CSS `@import` / JS-loaded assets** — only one level of asset extraction; chained imports are not followed
+- **Full SPAs** — pages that render login forms entirely at runtime via JS bundles (React/Angular/Vue with no `<form>` tags in the static HTML) won't have forms to rewrite. The JS beacon hook still captures any credentials submitted via `fetch`/XHR, but there are no form actions to intercept. Use [evilginx](https://github.com/kgretzky/evilginx2) or [Modlishka](https://github.com/drk1wi/Modlishka) for full SPA reverse-proxy coverage
+- **Bot protection** — Cloudflare, Akamai, and similar WAFs may block or rate-limit the cloner HTTP client
+- **Nested CSS imports** — only one level of CSS sub-asset extraction; `@import` chains inside downloaded CSS files are not recursed
 - **2FA/MFA relay** — not supported; this is not a reverse proxy. See [evilginx2](https://github.com/kgretzky/evilginx2) for that
