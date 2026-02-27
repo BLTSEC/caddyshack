@@ -21,6 +21,7 @@ type Config struct {
 	WebhookURL  string
 	Verbose     bool
 	InsecureTLS bool
+	Overlay     bool
 	CloneDir    string
 }
 
