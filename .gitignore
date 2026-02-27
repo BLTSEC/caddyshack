@@ -1,14 +1,31 @@
-# Binaries for programs and plugins
+# Binaries
+caddyshack
+caddyshack.exe
 *.exe
 *.dll
 *.so
 *.dylib
 
-# Test binary, build with `go test -c`
+# Test binary
 *.test
 
-# Output of the go coverage tool, specifically when used with LiteIDE
+# Coverage
 *.out
 
-# Project-local glide cache, RE: https://github.com/Masterminds/glide/issues/736
-.glide/
+# Credential logs
+creds.json
+*.jsonl
+
+# TLS artifacts
+*.pem
+*.crt
+*.key
+*.p12
+*.pfx
+
+# macOS
+.DS_Store
+
+# Go workspace
+go.work
+go.work.sum
