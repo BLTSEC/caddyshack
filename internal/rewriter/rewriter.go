@@ -28,22 +28,14 @@ func RewriteForms(htmlContent string) (string, error) {
 func rewriteNode(n *html.Node) {
 	if n.Type == html.ElementNode && n.Data == "form" {
 		hasAction := false
-		hasMethod := false
 		for i, a := range n.Attr {
-			switch strings.ToLower(a.Key) {
-			case "action":
+			if strings.ToLower(a.Key) == "action" {
 				n.Attr[i].Val = "/submit"
 				hasAction = true
-			case "method":
-				n.Attr[i].Val = "POST"
-				hasMethod = true
 			}
 		}
 		if !hasAction {
 			n.Attr = append(n.Attr, html.Attribute{Key: "action", Val: "/submit"})
-		}
-		if !hasMethod {
-			n.Attr = append(n.Attr, html.Attribute{Key: "method", Val: "POST"})
 		}
 	}
 	for c := n.FirstChild; c != nil; c = c.NextSibling {

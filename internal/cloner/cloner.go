@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -75,6 +76,37 @@ func (c *Cloner) Clone(ctx context.Context) error {
 		}
 	}
 
+	// Process CSS sub-assets: rewrite url() references inside downloaded CSS files.
+	for i := range assets {
+		if !assets[i].Downloaded || !strings.HasSuffix(assets[i].LocalPath, ".css") {
+			continue
+		}
+		cssPath := filepath.Join(assetsDir, assets[i].LocalPath)
+		cssBytes, err := os.ReadFile(cssPath)
+		if err != nil {
+			continue
+		}
+		cssBase, err := url.Parse(assets[i].AbsoluteURL)
+		if err != nil {
+			continue
+		}
+		cssAssets := ExtractCSSURLs(string(cssBytes), cssBase)
+		if c.verbose {
+			fmt.Printf("[v] CSS %s: found %d sub-assets\n", assets[i].LocalPath, len(cssAssets))
+		}
+		for j := range cssAssets {
+			if err := c.downloadCSSAsset(ctx, &cssAssets[j], assetsDir); err != nil {
+				if c.verbose {
+					fmt.Printf("[v] CSS sub-asset skipped: %s: %v\n", cssAssets[j].AbsoluteURL, err)
+				}
+			}
+		}
+		rewritten := RewriteCSSURLs(string(cssBytes), cssAssets)
+		if err := os.WriteFile(cssPath, []byte(rewritten), 0644); err != nil && c.verbose {
+			fmt.Printf("[v] Failed to rewrite CSS %s: %v\n", assets[i].LocalPath, err)
+		}
+	}
+
 	modified := RewriteAssetURLs(string(htmlBytes), assets)
 
 	indexPath := filepath.Join(c.cloneDir, "index.html")
@@ -114,6 +146,8 @@ func (c *Cloner) downloadAsset(ctx context.Context, asset *Asset, assetsDir stri
 		return err
 	}
 	req.Header.Set("User-Agent", c.userAgent)
+	req.Header.Set("Referer", c.targetURL)
+	req.Header.Set("Accept", "*/*")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -132,6 +166,42 @@ func (c *Cloner) downloadAsset(ctx context.Context, asset *Asset, assetsDir stri
 	}
 	defer f.Close()
 
-	_, err = io.Copy(f, io.LimitReader(resp.Body, maxAssetSize))
-	return err
+	if _, err = io.Copy(f, io.LimitReader(resp.Body, maxAssetSize)); err != nil {
+		return err
+	}
+	asset.Downloaded = true
+	return nil
+}
+
+func (c *Cloner) downloadCSSAsset(ctx context.Context, asset *CSSAsset, assetsDir string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.AbsoluteURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", c.userAgent)
+	req.Header.Set("Referer", c.targetURL)
+	req.Header.Set("Accept", "*/*")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	localPath := filepath.Join(assetsDir, asset.LocalPath)
+	f, err := os.Create(localPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	if _, err = io.Copy(f, io.LimitReader(resp.Body, maxAssetSize)); err != nil {
+		return err
+	}
+	asset.Downloaded = true
+	return nil
 }
