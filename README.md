@@ -1,6 +1,6 @@
 # caddyshack
 
-**Website Cloner & Credential Harvester — v2.3.0**
+**Website Cloner & Credential Harvester — v2.0.0**
 
 Written by: Brennan Turner ([@BLTSEC](https://BLTSEC.COM))
 
