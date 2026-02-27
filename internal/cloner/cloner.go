@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -74,6 +75,8 @@ func (c *Cloner) Clone(ctx context.Context) error {
 				fmt.Printf("[v] Asset skipped (non-fatal): %s: %v\n", assets[i].AbsoluteURL, err)
 			}
 		}
+		// Throttle requests to avoid triggering CDN rate limits (429)
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	// Process CSS sub-assets: rewrite url() references inside downloaded CSS files.
@@ -100,6 +103,7 @@ func (c *Cloner) Clone(ctx context.Context) error {
 					fmt.Printf("[v] CSS sub-asset skipped: %s: %v\n", cssAssets[j].AbsoluteURL, err)
 				}
 			}
+			time.Sleep(100 * time.Millisecond)
 		}
 		rewritten := RewriteCSSURLs(string(cssBytes), cssAssets)
 		if err := os.WriteFile(cssPath, []byte(rewritten), 0644); err != nil && c.verbose {
@@ -157,30 +161,57 @@ func (c *Cloner) downloadCSSAsset(ctx context.Context, asset *CSSAsset, assetsDi
 }
 
 func (c *Cloner) downloadToFile(ctx context.Context, absoluteURL, localName, assetsDir string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, absoluteURL, nil)
-	if err != nil {
+	const maxRetries = 1
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, absoluteURL, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("User-Agent", c.userAgent)
+		req.Header.Set("Referer", c.targetURL)
+		req.Header.Set("Accept", "*/*")
+
+		resp, err := c.client.Do(req)
+		if err != nil {
+			return err
+		}
+
+		if resp.StatusCode == http.StatusTooManyRequests && attempt < maxRetries {
+			resp.Body.Close()
+			wait := 3 * time.Second
+			if ra := resp.Header.Get("Retry-After"); ra != "" {
+				if secs, err := strconv.Atoi(ra); err == nil && secs > 0 && secs <= 30 {
+					wait = time.Duration(secs) * time.Second
+				}
+			}
+			if c.verbose {
+				fmt.Printf("[v] 429 on %s, retrying in %v\n", localName, wait)
+			}
+			select {
+			case <-time.After(wait):
+				continue
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return fmt.Errorf("HTTP %d", resp.StatusCode)
+		}
+
+		f, err := os.Create(filepath.Join(assetsDir, localName))
+		if err != nil {
+			resp.Body.Close()
+			return err
+		}
+
+		_, err = io.Copy(f, io.LimitReader(resp.Body, maxAssetSize))
+		resp.Body.Close()
+		f.Close()
 		return err
 	}
-	req.Header.Set("User-Agent", c.userAgent)
-	req.Header.Set("Referer", c.targetURL)
-	req.Header.Set("Accept", "*/*")
 
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-
-	f, err := os.Create(filepath.Join(assetsDir, localName))
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	_, err = io.Copy(f, io.LimitReader(resp.Body, maxAssetSize))
-	return err
+	return fmt.Errorf("HTTP %d after %d retries", http.StatusTooManyRequests, maxRetries)
 }

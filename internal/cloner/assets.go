@@ -125,7 +125,14 @@ func RewriteAssetURLs(htmlContent string, assets []Asset) string {
 		if a.LocalPath == "" || !a.Downloaded {
 			continue
 		}
-		htmlContent = strings.ReplaceAll(htmlContent, a.OriginalURL, "/assets/"+a.LocalPath)
+		replacement := "/assets/" + a.LocalPath
+		htmlContent = strings.ReplaceAll(htmlContent, a.OriginalURL, replacement)
+		// The HTML tokenizer decodes &amp; → &, but the raw HTML still has &amp;.
+		// Replace the entity-encoded form too so dynamic URLs (e.g. /w/load.php?a=1&b=2) are rewritten.
+		if strings.Contains(a.OriginalURL, "&") {
+			encoded := strings.ReplaceAll(a.OriginalURL, "&", "&amp;")
+			htmlContent = strings.ReplaceAll(htmlContent, encoded, replacement)
+		}
 	}
 	return htmlContent
 }
@@ -203,7 +210,9 @@ func makeAsset(rawURL string, base *url.URL, tag, attr string) *Asset {
 	}
 
 	ext := path.Ext(abs.Path)
-	if ext == "" {
+	// Dynamic resource loaders (e.g. /load.php?only=styles) have misleading extensions.
+	// Fall back to tag-based defaults for common cases.
+	if ext == "" || ext == ".php" || ext == ".asp" || ext == ".aspx" || ext == ".jsp" {
 		switch tag {
 		case "link":
 			ext = ".css"
